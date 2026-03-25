@@ -198,8 +198,8 @@ export class Orderbook {
   // This method powers that screen.
 
   getOpenOrders(userId: string): Order[] {
-    const asks = this.asks.filter((o) => o.orderId === userId);
-    const bids = this.bids.filter((o) => o.orderId === userId);
+    const asks = this.asks.filter((o) => o.userId === userId);
+    const bids = this.bids.filter((o) => o.userId === userId);
 
     return [...asks, ...bids];
   }
