@@ -2,6 +2,20 @@
 
 This guide shows you **exactly** how to build your React + TypeScript + Tailwind CSS Exchange frontend from scratch. Follow each step in order, copy-paste the commands, and understand what each file does.
 
+## **📌 Updated: TanStack Query (React Query) for Server State Management**
+
+This guide has been updated to use **TanStack Query** instead of a custom `useApi.ts` hook. Why?
+- Industry standard (used in thousands of production apps)
+- Automatic caching, deduplication, and request management
+- Built-in handling of loading states, errors, and side effects
+- Less code to write and maintain
+
+Key changes:
+- **Step 12** now installs and configures TanStack Query
+- **BuyForm** and **SellForm** use `useMutation` for order placement
+- **OpenOrdersTable** uses `useMutation` for cancel operations
+- **App.tsx** wrapped with `QueryClientProvider` for global cache management
+
 ## **PHASE 1: PROJECT INITIALIZATION**
 
 ### Step 1: Navigate to project and install dependencies
@@ -807,110 +821,182 @@ export function useWebSocketConnection() {
 
 ---
 
-### Step 12: Create src/hooks/useApi.ts
+### Step 12: Install TanStack Query
 
-Create `/Users/sanjayraj/Desktop/E/frontend/src/hooks/useApi.ts`:
+Instead of creating a custom useApi hook, we'll use TanStack Query (React Query) which is the industry standard for server state management.
+
+Add the package to your dependencies:
+
+```bash
+cd /Users/sanjayraj/Desktop/E/frontend
+npm install @tanstack/react-query
+```
+
+**What this does:**
+
+- TanStack Query handles: caching, background refetching, synchronization, and deduplication
+- `useQuery` = for GET requests (automatic data fetching)
+- `useMutation` = for POST/PUT/DELETE requests (manual execution with side effects)
+- Replaces custom `useApi` and `useApiFetch` hooks entirely
+
+**Why TanStack Query:**
+
+- Industry standard (used by thousands of production apps)
+- Automatic request deduplication (multiple components requesting same data = one request)
+- Built-in caching and background refetch
+- Better TypeScript support
+- Handles edge cases like stale data, race conditions
+- Less code to write and maintain
+
+---
+
+### Step 12b: Create React Query Provider Wrapper
+
+Create `/Users/sanjayraj/Desktop/E/frontend/src/queryClient.ts`:
 
 ```typescript
-import React, { useState, useCallback, useEffect } from "react";
-
-interface UseApiState<T> {
-  data: T | null;
-  loading: boolean;
-  error: string | null;
-}
-
-interface UseApiReturn<T> extends UseApiState<T> {
-  execute: (...args: any[]) => Promise<T>;
-  reset: () => void;
-}
+import { QueryClient } from '@tanstack/react-query';
 
 /**
- * Hook to manage async API calls with loading/error states
+ * Centralized QueryClient configuration
+ * Controls caching, retries, and request deduplication
  */
-export function useApi<T>(
-  apiFunction: (...args: any[]) => Promise<T>,
-): UseApiReturn<T> {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: false,
-    error: null,
-  });
-
-  const execute = useCallback(
-    async (...args: any[]) => {
-      setState({ data: null, loading: true, error: null });
-
-      try {
-        const result = await apiFunction(...args);
-        setState({ data: result, loading: false, error: null });
-        return result;
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error";
-        setState({ data: null, loading: false, error: errorMessage });
-        throw err;
-      }
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes (was cacheTime)
+      retry: 1, // Retry failed requests once
+      refetchOnWindowFocus: false, // Don't refetch when window regains focus
     },
-    [apiFunction],
-  );
-
-  const reset = useCallback(() => {
-    setState({ data: null, loading: false, error: null });
-  }, []);
-
-  return {
-    ...state,
-    execute,
-    reset,
-  };
-}
-
-/**
- * Hook for fetch-and-display pattern (auto-fetch on mount or deps change)
- */
-export function useApiFetch<T>(
-  apiFunction: (...args: any[]) => Promise<T>,
-  args: any[] = [],
-  dependencies: any[] = [],
-) {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
-
-  const refetch = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      const result = await apiFunction(...args);
-      setState({ data: result, loading: false, error: null });
-      return result;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
-      setState({ data: null, loading: false, error: errorMessage });
-      throw err;
-    }
-  }, [apiFunction, ...args]);
-
-  // Auto-fetch on mount or when dependencies change
-  useEffect(() => {
-    refetch();
-  }, dependencies);
-
-  return {
-    ...state,
-    refetch,
-  };
-}
+    mutations: {
+      retry: 0, // Don't retry mutations
+    },
+  },
+});
 ```
 
 **Why:**
 
-- loading state = show spinner while fetching
-- error state = show error message if fails
-- useApi = manual control (on button click)
-- useApiFetch = automatic on mount or deps change
+- `staleTime` = how long before data is considered "stale" (refetch on demand)
+- `gcTime` = how long to keep unused data in cache
+- `retry` = automatic retry logic for failed requests
+- Centralized config = consistent behavior across entire app
+
+---
+
+### Step 12c: Update src/index.tsx to wrap with QueryClientProvider
+
+Find the `src/index.tsx` file you created earlier and update it:
+
+```typescript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import App from './App';
+import { queryClient } from './queryClient';
+import './App.css';
+
+const root = ReactDOM.createRoot(
+  document.getElementById('root') as HTMLElement
+);
+
+root.render(
+  <React.StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </React.StrictMode>
+);
+```
+
+**What changed:**
+
+- Import `QueryClientProvider` from TanStack Query
+- Import the `queryClient` we created
+- Wrap `<App />` with `<QueryClientProvider>` to give all components access to React Query
+- This is done once at the root level
+
+---
+
+### Step 12d: Example: Using useQuery for GET requests
+
+When you need to fetch data and display it, use `useQuery`:
+
+```typescript
+import { useQuery } from '@tanstack/react-query';
+
+export function MyComponent() {
+  // This replaces: useApiFetch(apiService.getTrades, [market], [market])
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['trades', market], // Unique key for caching
+    queryFn: () => apiService.getTrades(market),
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+
+  return <div>{data?.length} trades</div>;
+}
+```
+
+**Key concepts:**
+
+- `queryKey` = unique identifier for this query (used for caching and deduplication)
+- `queryFn` = the async function to call
+- `data` = result from API
+- `isLoading` = true while fetching
+- `error` = Error object if request fails
+- Automatic refetch when `queryKey` changes
+- Automatic caching (no more manual state management!)
+
+---
+
+### Step 12e: Example: Using useMutation for POST/PUT/DELETE
+
+When you need to send data and trigger side effects, use `useMutation`:
+
+```typescript
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+export function BuyForm() {
+  const queryClient = useQueryClient();
+
+  // This replaces: useApi(apiService.createOrder)
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: (data) => apiService.createOrder(data),
+    onSuccess: () => {
+      // After successful order, refetch open orders
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    mutate({ market, price, quantity, side: 'buy', userId });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="number" placeholder="Price" />
+      <input type="number" placeholder="Quantity" />
+      <button disabled={isPending}>
+        {isPending ? 'Placing...' : 'Place Buy Order'}
+      </button>
+      {error && <div className="error">{error.message}</div>}
+    </form>
+  );
+}
+```
+
+**Key concepts:**
+
+- `mutationFn` = the async function to call (POST/DELETE/etc)
+- `mutate` = function to call in event handlers
+- `isPending` = true while mutation is in progress
+- `error` = Error object if mutation fails
+- `onSuccess` = callback after successful mutation (use to refetch related queries)
+- `invalidateQueries` = tell React Query "this data changed, refetch it"
 
 ---
 
@@ -1512,6 +1598,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ market }) => {
 
 ```typescript
 import React, { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../Common/Button';
 import { Input } from '../Common/Input';
 import { Card } from '../Common/Card';
@@ -1520,49 +1607,47 @@ import { apiService } from '../../services/api';
 interface BuyFormProps {
   market: string;
   userId: string;
-  onOrderPlaced?: () => void;
 }
 
-export const BuyForm: React.FC<BuyFormProps> = ({ market, userId, onOrderPlaced }) => {
+export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!price || !quantity) {
-      setError('Price and quantity are required');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await apiService.createOrder({
+  // useMutation replaces manual loading/error state management
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: () =>
+      apiService.createOrder({
         market,
         price,
         quantity,
         side: 'buy',
         userId,
-      });
-
+      }),
+    onSuccess: (response) => {
+      // Success: clear form and show message
       setSuccess(`Buy order placed! ID: ${response.payload?.orderId}`);
       setPrice('');
       setQuantity('');
 
-      if (onOrderPlaced) {
-        onOrderPlaced();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place order');
-    } finally {
-      setLoading(false);
+      // Refetch open orders - React Query automatically updates components
+      queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!price || !quantity) {
+      // Error handling is built into useMutation
+      return;
     }
+
+    mutate();
   };
 
   return (
@@ -1577,7 +1662,7 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId, onOrderPlaced 
           placeholder="Enter price"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
-          disabled={loading}
+          disabled={isPending}
         />
 
         <Input
@@ -1587,20 +1672,28 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId, onOrderPlaced 
           placeholder="Enter quantity"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
-          disabled={loading}
+          disabled={isPending}
         />
 
-        {error && <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">{error}</div>}
-        {success && <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">{success}</div>}
+        {error && (
+          <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">
+            {error instanceof Error ? error.message : 'Failed to place order'}
+          </div>
+        )}
+        {success && (
+          <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">
+            {success}
+          </div>
+        )}
 
         <Button
           type="submit"
           variant="success"
-          loading={loading}
-          disabled={loading}
+          loading={isPending}
+          disabled={isPending}
           className="w-full"
         >
-          {loading ? 'Placing...' : 'Place Buy Order'}
+          {isPending ? 'Placing...' : 'Place Buy Order'}
         </Button>
       </form>
     </Card>
@@ -1608,10 +1701,19 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId, onOrderPlaced 
 };
 ```
 
+**What changed:**
+
+- Uses `useMutation` instead of manual `useState` + try/catch
+- `isPending` replaces manual `loading` state
+- `error` automatically managed by React Query
+- `queryClient.invalidateQueries` tells React Query to refetch open orders (automatic UI update)
+- No need for `onOrderPlaced` callback - React Query handles cache invalidation
+
 #### Create src/components/TradePanel/SellForm.tsx:
 
 ```typescript
 import React, { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../Common/Button';
 import { Input } from '../Common/Input';
 import { Card } from '../Common/Card';
@@ -1620,49 +1722,47 @@ import { apiService } from '../../services/api';
 interface SellFormProps {
   market: string;
   userId: string;
-  onOrderPlaced?: () => void;
 }
 
-export const SellForm: React.FC<SellFormProps> = ({ market, userId, onOrderPlaced }) => {
+export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!price || !quantity) {
-      setError('Price and quantity are required');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const response = await apiService.createOrder({
+  // useMutation replaces manual loading/error state management
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: () =>
+      apiService.createOrder({
         market,
         price,
         quantity,
         side: 'sell',
         userId,
-      });
-
+      }),
+    onSuccess: (response) => {
+      // Success: clear form and show message
       setSuccess(`Sell order placed! ID: ${response.payload?.orderId}`);
       setPrice('');
       setQuantity('');
 
-      if (onOrderPlaced) {
-        onOrderPlaced();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place order');
-    } finally {
-      setLoading(false);
+      // Refetch open orders - React Query automatically updates components
+      queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!price || !quantity) {
+      // Error handling is built into useMutation
+      return;
     }
+
+    mutate();
   };
 
   return (
@@ -1677,7 +1777,7 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId, onOrderPlace
           placeholder="Enter price"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
-          disabled={loading}
+          disabled={isPending}
         />
 
         <Input
@@ -1687,26 +1787,42 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId, onOrderPlace
           placeholder="Enter quantity"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
-          disabled={loading}
+          disabled={isPending}
         />
 
-        {error && <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">{error}</div>}
-        {success && <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">{success}</div>}
+        {error && (
+          <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">
+            {error instanceof Error ? error.message : 'Failed to place order'}
+          </div>
+        )}
+        {success && (
+          <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">
+            {success}
+          </div>
+        )}
 
         <Button
           type="submit"
           variant="danger"
-          loading={loading}
-          disabled={loading}
+          loading={isPending}
+          disabled={isPending}
           className="w-full"
         >
-          {loading ? 'Placing...' : 'Place Sell Order'}
+          {isPending ? 'Placing...' : 'Place Sell Order'}
         </Button>
       </form>
     </Card>
   );
 };
 ```
+
+**What changed (same as BuyForm):**
+
+- Uses `useMutation` instead of manual `useState` + try/catch
+- `isPending` replaces manual `loading` state
+- `error` automatically managed by React Query
+- `queryClient.invalidateQueries` tells React Query to refetch open orders
+- No need for `onOrderPlaced` callback - React Query handles cache invalidation
 
 #### Create src/components/TradePanel/TradePanel.tsx:
 
@@ -1718,14 +1834,13 @@ import { SellForm } from './SellForm';
 interface TradePanelProps {
   market: string;
   userId: string;
-  onOrderPlaced?: () => void;
 }
 
-export const TradePanel: React.FC<TradePanelProps> = ({ market, userId, onOrderPlaced }) => {
+export const TradePanel: React.FC<TradePanelProps> = ({ market, userId }) => {
   return (
     <div className="grid grid-cols-2 gap-4">
-      <BuyForm market={market} userId={userId} onOrderPlaced={onOrderPlaced} />
-      <SellForm market={market} userId={userId} onOrderPlaced={onOrderPlaced} />
+      <BuyForm market={market} userId={userId} />
+      <SellForm market={market} userId={userId} />
     </div>
   );
 };
@@ -1807,34 +1922,33 @@ export const RecentTrades: React.FC<RecentTradesProps> = ({ market }) => {
 #### Create src/components/Orders/OpenOrders.tsx:
 
 ```typescript
-import React, { useState } from 'react';
+import React from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Order } from '../../types';
 import { Button } from '../Common/Button';
 import { apiService } from '../../services/api';
 
 interface OpenOrdersTableProps {
   orders: Order[];
-  onOrderCancelled?: () => void;
+  userId: string;
+  market: string;
 }
 
-export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, onOrderCancelled }) => {
-  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, userId, market }) => {
+  const queryClient = useQueryClient();
 
-  const handleCancel = async (orderId: string, market: string) => {
-    setCancellingOrderId(orderId);
-    setError(null);
+  // useMutation for cancelling orders
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: (params: { orderId: string; market: string }) =>
+      apiService.cancelOrder(params.orderId, params.market),
+    onSuccess: () => {
+      // Refetch orders after successful cancellation
+      queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
+    },
+  });
 
-    try {
-      await apiService.cancelOrder(orderId, market);
-      if (onOrderCancelled) {
-        onOrderCancelled();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel order');
-    } finally {
-      setCancellingOrderId(null);
-    }
+  const handleCancel = (orderId: string, orderMarket: string) => {
+    mutate({ orderId, market: orderMarket });
   };
 
   if (orders.length === 0) {
@@ -1845,7 +1959,7 @@ export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, onOrde
     <div className="space-y-2">
       {error && (
         <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">
-          {error}
+          {error instanceof Error ? error.message : 'Failed to cancel order'}
         </div>
       )}
       <div className="space-y-0 max-h-80 overflow-y-auto">
@@ -1873,10 +1987,10 @@ export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, onOrde
               size="sm"
               variant="danger"
               onClick={() => handleCancel(order.orderId, order.market)}
-              loading={cancellingOrderId === order.orderId}
-              disabled={cancellingOrderId !== null}
+              loading={isPending}
+              disabled={isPending}
             >
-              {cancellingOrderId === order.orderId ? '...' : 'Cancel'}
+              {isPending ? '...' : 'Cancel'}
             </Button>
           </div>
         ))}
@@ -1886,10 +2000,18 @@ export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, onOrde
 };
 ```
 
+**What changed:**
+
+- Uses `useMutation` to handle cancel requests
+- `isPending` shows loading state while cancelling
+- Pass `userId` and `market` for cache invalidation
+- After successful cancel, refetch orders using `invalidateQueries`
+- Simplified state management (no local state tracking)
+
 #### Create src/components/Orders/Orders.tsx:
 
 ```typescript
-import React, { useCallback } from 'react';
+import React from 'react';
 import { useOrders } from '../../hooks/useOrders';
 import { OpenOrdersTable } from './OpenOrders';
 import { Card } from '../Common/Card';
@@ -1900,11 +2022,7 @@ interface OrdersProps {
 }
 
 export const Orders: React.FC<OrdersProps> = ({ market, userId }) => {
-  const { orders, loading, error, refetch } = useOrders(userId, market);
-
-  const handleOrderCancelled = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  const { orders, loading, error } = useOrders(userId, market);
 
   return (
     <Card title="Open Orders">
@@ -1916,12 +2034,17 @@ export const Orders: React.FC<OrdersProps> = ({ market, userId }) => {
       {loading ? (
         <div className="text-gray-400">Loading...</div>
       ) : (
-        <OpenOrdersTable orders={orders} onOrderCancelled={handleOrderCancelled} />
+        <OpenOrdersTable orders={orders} userId={userId} market={market} />
       )}
     </Card>
   );
 };
 ```
+
+**What changed:**
+
+- Remove `handleOrderCancelled` callback - React Query handles cache invalidation in OpenOrdersTable
+- Pass `userId` and `market` to OpenOrdersTable for cache invalidation key
 
 ---
 
@@ -2124,10 +2247,6 @@ function App() {
     setMarket(newMarket);
   }, []);
 
-  const handleOrderPlaced = useCallback(() => {
-    // Orders component will refetch via hook
-  }, []);
-
   return (
     <Layout
       market={market}
@@ -2145,7 +2264,6 @@ function App() {
           <TradePanel
             market={market}
             userId={USER_ID}
-            onOrderPlaced={handleOrderPlaced}
           />
           <div className="flex-1 overflow-auto">
             <Orders market={market} userId={USER_ID} />
