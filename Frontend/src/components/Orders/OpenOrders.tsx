@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiService } from "../../services/api";
 import { Order } from "../../types";
-import { Button } from "../common/Buttom";
+import { Button } from "../common/Button";
 
 interface OpenOrdersTableProps {
   orders: Order[];
