@@ -40,10 +40,12 @@ tickerRouter.get("/", async (req, res) => {
   const row = response.rows[0];
 
   res.json({
-    firstPrice: row.open,
-    high: row.high,
-    low: row.low,
-    lastPrice: row.close,
-    volume: row.volume,
+    payload: {
+      firstPrice: row.open,
+      high: row.high,
+      low: row.low,
+      lastPrice: row.close,
+      volume: row.volume,
+    },
   });
 });

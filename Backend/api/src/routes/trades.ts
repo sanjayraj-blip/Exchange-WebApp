@@ -36,5 +36,5 @@ tradesRouter.get("/", async (req, res) => {
     [symbol],
   );
 
-  res.json(response.rows);
+  res.json({ payload: response.rows });
 });

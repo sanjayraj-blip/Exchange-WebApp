@@ -46,8 +46,8 @@ klineRouter.get("/", async (req, res) => {
     symbol,
   ]);
 
-  res.json(
-    response.rows.map((row) => ({
+  res.json({
+    payload: response.rows.map((row) => ({
       open: row.open,
       high: row.high,
       low: row.low,
@@ -55,5 +55,5 @@ klineRouter.get("/", async (req, res) => {
       volume: row.volume,
       start: row.bucket,
     })),
-  );
+  });
 });
