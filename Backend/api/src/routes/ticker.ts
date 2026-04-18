@@ -12,7 +12,7 @@ export const tickerRouter = Router();
 
 const pgClient = new Client({
   host: "localhost",
-  port: 5432,
+  port: 5433,
   database: "exchange_db",
   user: "admin",
   password: "password",

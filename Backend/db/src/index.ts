@@ -5,7 +5,7 @@ import { DbMessage, ORDER_UPDATE, TRADE_ADDED } from "./types";
 
 const pgClient = new Client({
   host: "localhost",
-  port: 5432,
+  port: 5433,
   database: "exchange_db",
   user: "admin",
   password: "password",
