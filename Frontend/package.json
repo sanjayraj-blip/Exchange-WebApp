@@ -5,6 +5,7 @@
   "private": true,
   "dependencies": {
     "@tanstack/react-query": "^5.99.0",
+    "lightweight-charts": "^5.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",

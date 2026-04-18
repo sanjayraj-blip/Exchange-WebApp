@@ -821,15 +821,15 @@ export function useWebSocketConnection() {
 
 ---
 
-### Step 12: Install TanStack Query
+### Step 12: Install TanStack Query and Lightweight Charts
 
-Instead of creating a custom useApi hook, we'll use TanStack Query (React Query) which is the industry standard for server state management.
-
-Add the package to your dependencies:
+We'll use two key libraries:
+1. **TanStack Query** - Server state management
+2. **Lightweight Charts** - Professional candlestick charts
 
 ```bash
 cd /Users/sanjayraj/Desktop/E/frontend
-npm install @tanstack/react-query
+npm install @tanstack/react-query lightweight-charts
 ```
 
 **What this does:**
@@ -1266,6 +1266,114 @@ export function useOrders(userId: string, market: string) {
 
 ---
 
+## **PHASE 5.5: CHARTS UTILITIES**
+
+### Step 15a: Create src/utils/ChartManager.ts
+
+Create `/Users/sanjayraj/Desktop/E/frontend/src/utils/ChartManager.ts`:
+
+```typescript
+import {
+  ColorType,
+  createChart as createLightWeightChart,
+  CrosshairMode,
+  ISeriesApi,
+  UTCTimestamp,
+} from 'lightweight-charts';
+
+interface CandleData {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  timestamp: Date;
+}
+
+export class ChartManager {
+  private candleSeries: ISeriesApi<'Candlestick'>;
+  private chart: any;
+
+  constructor(
+    ref: HTMLDivElement,
+    initialData: CandleData[],
+    layout: { background: string; color: string }
+  ) {
+    // Create chart with dark theme
+    const chart = createLightWeightChart(ref, {
+      autoSize: true,
+      overlayPriceScales: {
+        ticksVisible: true,
+        borderVisible: true,
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        visible: true,
+        ticksVisible: true,
+        entireTextOnly: true,
+      },
+      grid: {
+        horzLines: {
+          visible: false,
+        },
+        vertLines: {
+          visible: false,
+        },
+      },
+      layout: {
+        background: {
+          type: ColorType.Solid,
+          color: layout.background,
+        },
+        textColor: layout.color,
+      },
+    });
+
+    this.chart = chart;
+    this.candleSeries = chart.addCandlestickSeries();
+
+    // Set initial candle data
+    this.candleSeries.setData(
+      initialData.map((data) => ({
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        time: (Math.floor(data.timestamp.getTime() / 1000)) as UTCTimestamp,
+      }))
+    );
+
+    // Auto-fit chart to content
+    chart.timeScale().fitContent();
+  }
+
+  // Update current candle with latest price
+  public update(candleData: CandleData) {
+    this.candleSeries.update({
+      open: candleData.open,
+      high: candleData.high,
+      low: candleData.low,
+      close: candleData.close,
+      time: (Math.floor(candleData.timestamp.getTime() / 1000)) as UTCTimestamp,
+    });
+  }
+
+  // Clean up chart on unmount
+  public destroy() {
+    this.chart.remove();
+  }
+}
+```
+
+**What this does:**
+- Wraps `lightweight-charts` library in a clean manager class
+- Handles chart initialization with dark theme (matches exchange UI)
+- `update()` = push new candle data as prices update
+- `destroy()` = cleanup on unmount (prevents memory leaks)
+
+---
+
 ## **PHASE 6: COMPONENTS**
 
 ### Step 16: Create Common UI Components
@@ -1326,6 +1434,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = 'Button';
 ```
 
+**Modern Usage (Arrow Function):**
+
+```typescript
+// When using the Button component in other files:
+const MyComponent = () => {
+  return (
+    <Button variant="primary" size="md">
+      Click me
+    </Button>
+  );
+};
+```
+
 #### Create src/components/Common/Input.tsx:
 
 ```typescript
@@ -1384,18 +1505,35 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 Input.displayName = 'Input';
 ```
 
+**Modern Usage (Arrow Function):**
+
+```typescript
+// When using the Input component in other files:
+const MyForm = () => {
+  const [value, setValue] = React.useState('');
+
+  return (
+    <Input
+      label="Email"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      error={value ? '' : 'Email is required'}
+      placeholder="Enter your email"
+    />
+  );
+};
+```
+
 #### Create src/components/Common/Card.tsx:
 
 ```typescript
-import React from 'react';
-
 interface CardProps {
   children: React.ReactNode;
   className?: string;
   title?: string;
 }
 
-export const Card: React.FC<CardProps> = ({ children, className = '', title }) => {
+export const Card = ({ children, className = '', title }: CardProps) => {
   return (
     <div className={`bg-exchange-surface rounded-lg p-4 shadow-md ${className}`}>
       {title && (
@@ -1409,6 +1547,11 @@ export const Card: React.FC<CardProps> = ({ children, className = '', title }) =
 };
 ```
 
+**Key Changes:**
+- Removed `React.FC` wrapper (modern React doesn't need it)
+- Used arrow function syntax directly
+- TypeScript still infers the return type automatically
+
 ---
 
 ### Step 17: Create OrderBook Components
@@ -1416,7 +1559,6 @@ export const Card: React.FC<CardProps> = ({ children, className = '', title }) =
 #### Create src/components/OrderBook/BidTable.tsx:
 
 ```typescript
-import React from 'react';
 import { OrderLevel } from '../../types';
 
 interface BidTableProps {
@@ -1424,7 +1566,7 @@ interface BidTableProps {
   maxQuantity: number;
 }
 
-export const BidTable: React.FC<BidTableProps> = ({ bids, maxQuantity }) => {
+export const BidTable = ({ bids, maxQuantity }: BidTableProps) => {
   return (
     <div className="space-y-0">
       <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-400 pb-2 border-b border-gray-700">
@@ -1462,7 +1604,6 @@ export const BidTable: React.FC<BidTableProps> = ({ bids, maxQuantity }) => {
 #### Create src/components/OrderBook/AskTable.tsx:
 
 ```typescript
-import React from 'react';
 import { OrderLevel } from '../../types';
 
 interface AskTableProps {
@@ -1470,7 +1611,7 @@ interface AskTableProps {
   maxQuantity: number;
 }
 
-export const AskTable: React.FC<AskTableProps> = ({ asks, maxQuantity }) => {
+export const AskTable = ({ asks, maxQuantity }: AskTableProps) => {
   return (
     <div className="space-y-0">
       <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-400 pb-2 border-b border-gray-700">
@@ -1508,7 +1649,6 @@ export const AskTable: React.FC<AskTableProps> = ({ asks, maxQuantity }) => {
 #### Create src/components/OrderBook/Depth.tsx:
 
 ```typescript
-import React from 'react';
 import { BidTable } from './BidTable';
 import { AskTable } from './AskTable';
 import { Card } from '../Common/Card';
@@ -1519,7 +1659,7 @@ interface DepthProps {
   loading: boolean;
 }
 
-export const Depth: React.FC<DepthProps> = ({ bids, asks, loading }) => {
+export const Depth = ({ bids, asks, loading }: DepthProps) => {
   // Find max quantity for scaling
   const allQuantities = [
     ...bids.map(b => parseFloat(b[1])),
@@ -1557,7 +1697,6 @@ export const Depth: React.FC<DepthProps> = ({ bids, asks, loading }) => {
 #### Create src/components/OrderBook/OrderBook.tsx:
 
 ```typescript
-import React from 'react';
 import { useOrderBook } from '../../hooks/useOrderBook';
 import { Depth } from './Depth';
 
@@ -1565,7 +1704,7 @@ interface OrderBookProps {
   market: string;
 }
 
-export const OrderBook: React.FC<OrderBookProps> = ({ market }) => {
+export const OrderBook = ({ market }: OrderBookProps) => {
   const { bids, asks, loading, error, isLive } = useOrderBook(market);
 
   return (
@@ -1597,7 +1736,7 @@ export const OrderBook: React.FC<OrderBookProps> = ({ market }) => {
 #### Create src/components/TradePanel/BuyForm.tsx:
 
 ```typescript
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../Common/Button';
 import { Input } from '../Common/Input';
@@ -1609,13 +1748,13 @@ interface BuyFormProps {
   userId: string;
 }
 
-export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
+export const BuyForm = ({ market, userId }: BuyFormProps) => {
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  // useMutation replaces manual loading/error state management
+  // useMutation handles all loading/error state automatically
   const { mutate, isPending, error } = useMutation({
     mutationFn: () =>
       apiService.createOrder({
@@ -1626,27 +1765,22 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
         userId,
       }),
     onSuccess: (response) => {
-      // Success: clear form and show message
+      // After successful order
       setSuccess(`Buy order placed! ID: ${response.payload?.orderId}`);
       setPrice('');
       setQuantity('');
 
-      // Refetch open orders - React Query automatically updates components
+      // Invalidate cache - React Query auto-refetches
       queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
 
-      // Clear success message after 3 seconds
+      // Clear success after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!price || !quantity) {
-      // Error handling is built into useMutation
-      return;
-    }
-
+    if (!price || !quantity) return;
     mutate();
   };
 
@@ -1680,6 +1814,7 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
             {error instanceof Error ? error.message : 'Failed to place order'}
           </div>
         )}
+
         {success && (
           <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">
             {success}
@@ -1701,6 +1836,13 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
 };
 ```
 
+**Key Modern Patterns:**
+- Arrow function component (no `React.FC`)
+- `useState` for local form state
+- `useMutation` for API calls (replaces manual try/catch)
+- `useQueryClient` for cache management
+- `isPending` replaces manual `loading` state
+
 **What changed:**
 
 - Uses `useMutation` instead of manual `useState` + try/catch
@@ -1712,7 +1854,7 @@ export const BuyForm: React.FC<BuyFormProps> = ({ market, userId }) => {
 #### Create src/components/TradePanel/SellForm.tsx:
 
 ```typescript
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../Common/Button';
 import { Input } from '../Common/Input';
@@ -1724,13 +1866,12 @@ interface SellFormProps {
   userId: string;
 }
 
-export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
+export const SellForm = ({ market, userId }: SellFormProps) => {
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
   const [success, setSuccess] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  // useMutation replaces manual loading/error state management
   const { mutate, isPending, error } = useMutation({
     mutationFn: () =>
       apiService.createOrder({
@@ -1741,27 +1882,19 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
         userId,
       }),
     onSuccess: (response) => {
-      // Success: clear form and show message
       setSuccess(`Sell order placed! ID: ${response.payload?.orderId}`);
       setPrice('');
       setQuantity('');
 
-      // Refetch open orders - React Query automatically updates components
       queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
 
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!price || !quantity) {
-      // Error handling is built into useMutation
-      return;
-    }
-
+    if (!price || !quantity) return;
     mutate();
   };
 
@@ -1795,6 +1928,7 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
             {error instanceof Error ? error.message : 'Failed to place order'}
           </div>
         )}
+
         {success && (
           <div className="text-green-500 text-sm p-2 bg-green-900/20 rounded">
             {success}
@@ -1816,6 +1950,8 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
 };
 ```
 
+**Same pattern as BuyForm:** Arrow function, `useMutation`, modern React hooks
+
 **What changed (same as BuyForm):**
 
 - Uses `useMutation` instead of manual `useState` + try/catch
@@ -1827,7 +1963,6 @@ export const SellForm: React.FC<SellFormProps> = ({ market, userId }) => {
 #### Create src/components/TradePanel/TradePanel.tsx:
 
 ```typescript
-import React from 'react';
 import { BuyForm } from './BuyForm';
 import { SellForm } from './SellForm';
 
@@ -1836,7 +1971,7 @@ interface TradePanelProps {
   userId: string;
 }
 
-export const TradePanel: React.FC<TradePanelProps> = ({ market, userId }) => {
+export const TradePanel = ({ market, userId }: TradePanelProps) => {
   return (
     <div className="grid grid-cols-2 gap-4">
       <BuyForm market={market} userId={userId} />
@@ -1850,10 +1985,104 @@ export const TradePanel: React.FC<TradePanelProps> = ({ market, userId }) => {
 
 ### Step 19: Create Trades Component
 
+#### Create src/components/Trades/TradeView.tsx:
+
+```typescript
+import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ChartManager } from '../../utils/ChartManager';
+import { apiService } from '../../services/api';
+import { Card } from '../Common/Card';
+
+interface TradeViewProps {
+  market: string;
+}
+
+export const TradeView = ({ market }: TradeViewProps) => {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartManagerRef = useRef<ChartManager | null>(null);
+
+  // Fetch klines data (candlestick data)
+  const { data: klines = [], isLoading, error } = useQuery({
+    queryKey: ['klines', market],
+    queryFn: () => apiService.getKlines(market, '1h', 100),
+    enabled: !!market,
+  });
+
+  // Initialize and update chart
+  useEffect(() => {
+    if (!chartRef.current || klines.length === 0) return;
+
+    // Destroy previous chart if exists
+    if (chartManagerRef.current) {
+      chartManagerRef.current.destroy();
+    }
+
+    // Create new chart
+    const chartManager = new ChartManager(
+      chartRef.current,
+      klines
+        .map((kline) => ({
+          open: parseFloat(kline.open),
+          high: parseFloat(kline.high),
+          low: parseFloat(kline.low),
+          close: parseFloat(kline.close),
+          timestamp: new Date(kline.time),
+        }))
+        .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()),
+      {
+        background: '#1a1a1a',
+        color: 'white',
+      }
+    );
+
+    chartManagerRef.current = chartManager;
+
+    // Cleanup on unmount
+    return () => {
+      chartManagerRef.current?.destroy();
+    };
+  }, [klines, market]);
+
+  if (error) {
+    return (
+      <Card title="Price Chart">
+        <div className="text-red-500 text-sm p-2 bg-red-900/20 rounded">
+          Failed to load chart data
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Price Chart">
+      {isLoading && <div className="text-gray-400 text-sm py-4">Loading chart...</div>}
+      <div
+        ref={chartRef}
+        style={{
+          height: '400px',
+          width: '100%',
+          display: isLoading ? 'none' : 'block',
+        }}
+      />
+    </Card>
+  );
+};
+```
+
+**Modern Patterns:**
+- Arrow function component
+- `useQuery` for fetching klines data
+- `useRef` for chart DOM reference
+- `useEffect` for chart initialization and cleanup
+- Candlestick chart with 1-hour intervals
+- Auto-sorts data by timestamp
+
+---
+
 #### Create src/components/Trades/RecentTrades.tsx:
 
 ```typescript
-import React from 'react';
 import { useTrades } from '../../hooks/useTrades';
 import { Card } from '../Common/Card';
 
@@ -1861,7 +2090,7 @@ interface RecentTradesProps {
   market: string;
 }
 
-export const RecentTrades: React.FC<RecentTradesProps> = ({ market }) => {
+export const RecentTrades = ({ market }: RecentTradesProps) => {
   const { trades, loading, error, isLive } = useTrades(market);
 
   if (loading) {
@@ -1922,7 +2151,6 @@ export const RecentTrades: React.FC<RecentTradesProps> = ({ market }) => {
 #### Create src/components/Orders/OpenOrders.tsx:
 
 ```typescript
-import React from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Order } from '../../types';
 import { Button } from '../Common/Button';
@@ -1934,15 +2162,13 @@ interface OpenOrdersTableProps {
   market: string;
 }
 
-export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, userId, market }) => {
+export const OpenOrdersTable = ({ orders, userId, market }: OpenOrdersTableProps) => {
   const queryClient = useQueryClient();
 
-  // useMutation for cancelling orders
   const { mutate, isPending, error } = useMutation({
     mutationFn: (params: { orderId: string; market: string }) =>
       apiService.cancelOrder(params.orderId, params.market),
     onSuccess: () => {
-      // Refetch orders after successful cancellation
       queryClient.invalidateQueries({ queryKey: ['orders', userId, market] });
     },
   });
@@ -2000,6 +2226,8 @@ export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, userId
 };
 ```
 
+**Modern Pattern:** Arrow function with `useMutation` for state management
+
 **What changed:**
 
 - Uses `useMutation` to handle cancel requests
@@ -2011,7 +2239,6 @@ export const OpenOrdersTable: React.FC<OpenOrdersTableProps> = ({ orders, userId
 #### Create src/components/Orders/Orders.tsx:
 
 ```typescript
-import React from 'react';
 import { useOrders } from '../../hooks/useOrders';
 import { OpenOrdersTable } from './OpenOrders';
 import { Card } from '../Common/Card';
@@ -2021,7 +2248,7 @@ interface OrdersProps {
   userId: string;
 }
 
-export const Orders: React.FC<OrdersProps> = ({ market, userId }) => {
+export const Orders = ({ market, userId }: OrdersProps) => {
   const { orders, loading, error } = useOrders(userId, market);
 
   return (
@@ -2053,14 +2280,12 @@ export const Orders: React.FC<OrdersProps> = ({ market, userId }) => {
 #### Create src/components/Layout/Header.tsx:
 
 ```typescript
-import React from 'react';
-
 interface HeaderProps {
   market: string;
   isLive: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ market, isLive }) => {
+export const Header = ({ market, isLive }: HeaderProps) => {
   return (
     <header className="bg-exchange-surface border-b border-gray-700 sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
@@ -2085,14 +2310,12 @@ export const Header: React.FC<HeaderProps> = ({ market, isLive }) => {
 #### Create src/components/Layout/Sidebar.tsx:
 
 ```typescript
-import React from 'react';
-
 interface SidebarProps {
   onMarketChange: (market: string) => void;
   currentMarket: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onMarketChange, currentMarket }) => {
+export const Sidebar = ({ onMarketChange, currentMarket }: SidebarProps) => {
   const markets = ['TATA_INR', 'RELIANCE_INR', 'INFY_INR'];
 
   return (
@@ -2123,7 +2346,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onMarketChange, currentMarket 
 #### Create src/components/Layout/Layout.tsx:
 
 ```typescript
-import React from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 
@@ -2134,12 +2356,12 @@ interface LayoutProps {
   isLive: boolean;
 }
 
-export const Layout: React.FC<LayoutProps> = ({
+export const Layout = ({
   children,
   market,
   onMarketChange,
   isLive,
-}) => {
+}: LayoutProps) => {
   return (
     <div className="min-h-screen bg-exchange-bg text-white flex flex-col">
       <Header market={market} isLive={isLive} />
@@ -2206,6 +2428,8 @@ body {
 ```typescript
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './queryClient';
 import App from './App';
 import './App.css';
 
@@ -2215,32 +2439,39 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </React.StrictMode>
 );
 ```
 
+**Key Changes:**
+- Wrapped `<App />` with `QueryClientProvider`
+- This enables all child components to use `useQuery` and `useMutation`
+- `queryClient` config is centralized in src/queryClient.ts
+
 #### Create src/App.tsx:
 
 ```typescript
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Layout } from './components/Layout/Layout';
 import { OrderBook } from './components/OrderBook/OrderBook';
 import { TradePanel } from './components/TradePanel/TradePanel';
+import { TradeView } from './components/Trades/TradeView';
 import { RecentTrades } from './components/Trades/RecentTrades';
 import { Orders } from './components/Orders/Orders';
 import { useWebSocketConnection } from './hooks/useWebSocket';
 
 const DEFAULT_MARKET = 'TATA_INR';
-const USER_ID = 'user-1'; // Hardcoded for now (no auth)
+const USER_ID = 'user-1';
 
-function App() {
+const App = () => {
   const [market, setMarket] = useState(DEFAULT_MARKET);
   const { isConnected } = useWebSocketConnection();
 
-  // Start connection on mount
-  React.useEffect(() => {
-    // WebSocket connection is managed by hook
+  useEffect(() => {
+    // WebSocket connection managed by hook
   }, []);
 
   const handleMarketChange = useCallback((newMarket: string) => {
@@ -2253,18 +2484,21 @@ function App() {
       onMarketChange={handleMarketChange}
       isLive={isConnected}
     >
-      <div className="grid grid-cols-4 gap-4 h-full">
-        {/* Left column: Order book (2 cols wide) */}
+      {/* Top row: Trading chart (full width) */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="col-span-4">
+          <TradeView market={market} />
+        </div>
+      </div>
+
+      {/* Middle row: Order book + Trading panel (4 columns) */}
+      <div className="grid grid-cols-4 gap-4 mt-4">
         <div className="col-span-2">
           <OrderBook market={market} />
         </div>
 
-        {/* Right column: Trading panel + orders (2 cols wide) */}
         <div className="col-span-2 space-y-4 flex flex-col">
-          <TradePanel
-            market={market}
-            userId={USER_ID}
-          />
+          <TradePanel market={market} userId={USER_ID} />
           <div className="flex-1 overflow-auto">
             <Orders market={market} userId={USER_ID} />
           </div>
@@ -2272,15 +2506,25 @@ function App() {
       </div>
 
       {/* Bottom row: Recent trades (full width) */}
-      <div className="col-span-4 mt-4 h-48">
-        <RecentTrades market={market} />
+      <div className="grid grid-cols-4 gap-4 mt-4">
+        <div className="col-span-4 h-48">
+          <RecentTrades market={market} />
+        </div>
       </div>
     </Layout>
   );
-}
+};
 
 export default App;
 ```
+
+**Modern Pattern:**
+- Arrow function component: `const App = () => { return (...) }`
+- `useState` for market state
+- `useCallback` for handlers (prevents unnecessary re-renders)
+- `useEffect` for side effects
+- Clean imports (no `React` unless JSX is used)
+- Removed `React.FC` wrapper
 
 ---
 
@@ -2334,6 +2578,243 @@ Expected: Should return JSON with bids/asks or error if backend isn't set up yet
 
 ---
 
+---
+
+## **MODERN REACT PATTERNS GUIDE**
+
+### Modern Component Syntax (Arrow Functions)
+
+**Old (Class-based):**
+```typescript
+class MyComponent extends React.Component {
+  render() {
+    return <div>Hello</div>;
+  }
+}
+```
+
+**Modern (Arrow Function):**
+```typescript
+const MyComponent = () => {
+  return <div>Hello</div>;
+};
+
+// Or shorter:
+export const MyComponent = () => <div>Hello</div>;
+```
+
+**Benefits:**
+- Cleaner, more readable code
+- No `this` binding issues
+- Easier to use hooks
+- Smaller bundle size
+
+---
+
+### State Management with Hooks
+
+**Using `useState`:**
+```typescript
+const MyComponent = () => {
+  const [count, setCount] = useState(0);
+
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      Count: {count}
+    </button>
+  );
+};
+```
+
+**Key Points:**
+- `useState` returns [state, setter]
+- Calling setter triggers re-render
+- Multiple `useState` calls = multiple state variables
+- No `.this.state` or `.this.setState()`
+
+---
+
+### Side Effects with `useEffect`
+
+**Fetch data on mount:**
+```typescript
+useEffect(() => {
+  const fetchData = async () => {
+    const data = await api.getData();
+    setData(data);
+  };
+
+  fetchData();
+}, []); // Empty dependency array = run once on mount
+```
+
+**Fetch when dependency changes:**
+```typescript
+useEffect(() => {
+  fetchData(market);
+}, [market]); // Re-run when market changes
+```
+
+**Cleanup on unmount:**
+```typescript
+useEffect(() => {
+  const subscription = subscribe();
+
+  return () => {
+    subscription.unsubscribe(); // Cleanup
+  };
+}, []);
+```
+
+---
+
+### Server State with TanStack Query
+
+**Fetching data with `useQuery`:**
+```typescript
+const { data, isLoading, error } = useQuery({
+  queryKey: ['orders', market],
+  queryFn: () => apiService.getOpenOrders(market),
+});
+
+if (isLoading) return <div>Loading...</div>;
+if (error) return <div>Error: {error.message}</div>;
+return <div>{data?.length} orders</div>;
+```
+
+**Mutating with `useMutation`:**
+```typescript
+const { mutate, isPending, error } = useMutation({
+  mutationFn: (data) => apiService.createOrder(data),
+  onSuccess: () => {
+    // Refetch related queries
+    queryClient.invalidateQueries({ queryKey: ['orders'] });
+  },
+});
+
+const handleSubmit = () => {
+  mutate({ market, price, quantity, side: 'buy' });
+};
+
+return (
+  <button onClick={handleSubmit} disabled={isPending}>
+    {isPending ? 'Placing...' : 'Place Order'}
+  </button>
+);
+```
+
+**Key Benefits:**
+- Automatic caching
+- Request deduplication
+- Built-in loading/error states
+- Zero manual state management
+- Network retry logic included
+
+---
+
+### Memoization with `useCallback`
+
+**Without memoization (creates new function on every render):**
+```typescript
+const MyComponent = () => {
+  const handleClick = () => {
+    console.log('Clicked');
+  };
+
+  return <Child onClick={handleClick} />;
+}; // handleClick recreated on every render!
+```
+
+**With memoization (same function reference):**
+```typescript
+const MyComponent = () => {
+  const handleClick = useCallback(() => {
+    console.log('Clicked');
+  }, []); // Dependency array
+
+  return <Child onClick={handleClick} />;
+}; // handleClick stays same unless dependencies change
+```
+
+**When to use:**
+- Passing callbacks to memoized children
+- Callbacks in dependency arrays
+- Performance optimization
+
+---
+
+### Refs with `useRef`
+
+**Accessing DOM elements:**
+```typescript
+const MyComponent = () => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleFocus = () => {
+    inputRef.current?.focus();
+  };
+
+  return (
+    <>
+      <input ref={inputRef} />
+      <button onClick={handleFocus}>Focus Input</button>
+    </>
+  );
+};
+```
+
+**Keeping mutable state (doesn't trigger re-render):**
+```typescript
+const MyComponent = () => {
+  const countRef = useRef(0);
+
+  const handleClick = () => {
+    countRef.current++; // No re-render
+    console.log(countRef.current);
+  };
+
+  return <button onClick={handleClick}>Increment</button>;
+};
+```
+
+**Chart references (DOM persistence):**
+```typescript
+const chartRef = useRef<ChartManager | null>(null);
+
+useEffect(() => {
+  chartRef.current = new ChartManager(...);
+  return () => chartRef.current?.destroy();
+}, []);
+```
+
+---
+
+### TypeScript Interfaces
+
+**Function component props:**
+```typescript
+interface ButtonProps {
+  label: string;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary';
+}
+
+export const Button = ({ label, onClick, variant = 'primary' }: ButtonProps) => {
+  return <button className={variant}>{label}</button>;
+};
+```
+
+**No need for `React.FC<>` wrapper:**
+```typescript
+// ❌ Old (not needed anymore)
+export const Button: React.FC<ButtonProps> = ({ label }) => <button>{label}</button>;
+
+// ✅ Modern (just use the types directly)
+export const Button = ({ label }: ButtonProps) => <button>{label}</button>;
+```
+
+---
+
 ## **Summary of What You Built**
 
 ### Architecture:
@@ -2347,12 +2828,14 @@ Expected: Should return JSON with bids/asks or error if backend isn't set up yet
 
 ### Core Features:
 
-1. ✅ Live order book (bids/asks)
-2. ✅ Buy/Sell order placement
-3. ✅ Open orders with cancel functionality
-4. ✅ Real-time trade stream
-5. ✅ Market switcher
-6. ✅ Connection status indicator
+1. ✅ Professional candlestick charts (Lightweight Charts)
+2. ✅ Live order book (bids/asks)
+3. ✅ Buy/Sell order placement
+4. ✅ Open orders with cancel functionality
+5. ✅ Real-time trade stream
+6. ✅ Market switcher
+7. ✅ Connection status indicator
+8. ✅ Automatic cache management (TanStack Query)
 
 ### What You Learned:
 
